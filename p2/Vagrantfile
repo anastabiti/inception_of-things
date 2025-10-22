@@ -1,0 +1,39 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "boxen/alpine-3.22"
+
+
+  config.vm.define "atabitiS" do | server|
+      server.vm.hostname = "atabitiS" 
+      server.vm.network "private_network" , ip: "192.168.56.110"
+      server.vm.provider "virtualbox" do | vm_server|
+        vm_server.memory = 1024
+        vm_server.cpus = 1
+        vm_server.name = "atabitiS"
+      end
+      server.vm.provision "shell" ,inline: <<-SHELL
+          apk update
+          apk add curl
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --node-ip 192.168.56.110 " sh -
+          
+          until sudo k3s kubectl get nodes 2>/dev/null | grep -q " Ready"; do
+            echo "Waiting for k3s node to be Ready..."
+            sleep 5
+          done
+
+          kubectl create deployment app1-deployment --image=anastabiti/app1-nginx --port=80 --replicas=1
+          kubectl expose deployment app1-deployment --name=app1-service --port=80 --target-port=80
+          kubectl create ingress app1-ingress --rule="app1.com/=app1-service:80"
+
+          kubectl create deployment app2-deployment --image=anastabiti/app2-nginx --port=80 --replicas=3
+          kubectl expose deployment app2-deployment --name=app2-service --port=80 --target-port=80
+          kubectl create ingress app2-ingress --rule="app2.com/=app2-service:80"
+
+          kubectl create deployment app3-deployment --image=anastabiti/app3-nginx --port=80 --replicas=1
+          kubectl expose deployment app3-deployment --name=app3-service --port=80 --target-port=80
+          kubectl create ingress app3-ingress --rule="/=app3-service:80"
+          
+        echo 'alias k="sudo k3s kubectl"' >> /home/vagrant/.profile
+        source /home/vagrant/.profile
+        SHELL
+  end
+end

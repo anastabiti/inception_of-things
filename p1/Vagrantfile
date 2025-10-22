@@ -1,0 +1,47 @@
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "boxen/alpine-3.22"
+
+  
+  config.vm.define "atabitiS" do | server |
+    server.vm.hostname = "atabitiS"
+    server.vm.network "private_network", ip: "192.168.56.110"
+    server.vm.provider "virtualbox" do | vr_box |
+      vr_box.memory = 1024
+      vr_box.cpus = 1
+      vr_box.name = "atabitiS"
+    end
+      server.vm.provision "shell", inline: <<-SHELL
+        echo $(whoami)
+        apk update      
+        apk add curl
+        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --write-kubeconfig-mode 644 --node-ip 192.168.56.110 --flannel-iface eth1" sh -
+        until  k3s kubectl get nodes  2>/dev/null ; do
+          echo "Waiting for k3s server to be ready..."
+          sleep 3
+        done
+        cp /var/lib/rancher/k3s/server/node-token /vagrant/node-token.txt
+        echo 'alias k=" k3s kubectl"' >> /home/vagrant/.profile
+        source /home/vagrant/.profile
+    SHELL
+  end
+
+
+  config.vm.define "atabitiSW" do | serverWorker|
+    serverWorker.vm.hostname = "atabitiSW"
+    serverWorker.vm.network "private_network", ip: "192.168.56.111"
+    serverWorker.vm.provider "virtualbox" do |vr_box_SW|
+      vr_box_SW.memory = 1024
+      vr_box_SW.cpus = 1
+      vr_box_SW.name = "atabitiSW"
+    end
+    serverWorker.vm.provision "shell", inline: <<-SHELL
+      apk update
+      apk add curl
+      TOKEN=$(cat /vagrant/node-token.txt)
+      curl -sfL https://get.k3s.io | K3S_URL=https://192.168.56.110:6443 K3S_TOKEN=$TOKEN  sh -s - agent --node-ip 192.168.56.111 --flannel-iface eth1 
+    SHELL
+  end
+
+end
